@@ -4,16 +4,14 @@ struct ContentView: View {
     @State private var filePath: String = ""
     @State private var feedback: String = ""
     @State private var videoFiles: [String] = []
-    @AppStorage("ipAddress") var adbAddress: String = "192.168.178.99"
-    private let adbPath = "/opt/homebrew/bin/adb" // Path to adb
+    @AppStorage("ipAddress") var adbAddress: String = ""
+    private let adbPath = "/opt/homebrew/bin/adb"
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("ADB VLC Controller")
                 .font(.largeTitle)
                 .padding(.bottom, 5)
-            Text("Made with love by Benny 🥰")
-                .bold()
 
             HStack {
                 Button(action: fetchVideoFiles) {
@@ -29,9 +27,24 @@ struct ContentView: View {
                         .foregroundStyle(.white)
                         .cornerRadius(8)
                 }
-
+                
                 Spacer()
                 
+                TextField("ADB IP Address", text: $adbAddress)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 200)
+
+                Button(action: {
+                    connect()
+                }) {
+                    Text("Reconnect/Connect")
+                        .padding()
+                        .foregroundStyle(.white)
+                        .cornerRadius(8)
+                }
+            }
+            
+            HStack {
                 Button(action: togglePlayPause) {
                     Text("Toggle Play/Pause")
                         .padding()
@@ -105,7 +118,7 @@ struct ContentView: View {
                 .frame(maxHeight: 150)
             }
 
-            Text("Feedback:")
+            Text("Output:")
                 .font(.headline)
 
             ScrollView {
@@ -150,10 +163,16 @@ struct ContentView: View {
     }
 
     private func fetchVideoFiles() {
-        let command = """
+        let createDirCommand = """
+        \(adbPath) shell mkdir -p /sdcard/Download/Videos
+        """
+        _ = executeProcessAndReturnResult(createDirCommand)
+        
+        let listCommand = """
         \(adbPath) shell ls /sdcard/Download/Videos
         """
-        let output = executeProcessAndReturnResult(command)
+        let output = executeProcessAndReturnResult(listCommand)
+        
         DispatchQueue.main.async {
             let files = output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
             videoFiles = files
@@ -210,6 +229,11 @@ struct ContentView: View {
     }
 
     private func selectAndTransferVideo() {
+        let createDirCommand = """
+        \(adbPath) shell mkdir -p /sdcard/Download/Videos
+        """
+        _ = executeProcessAndReturnResult(createDirCommand)
+        
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.movie]
         panel.canChooseFiles = true
@@ -223,7 +247,7 @@ struct ContentView: View {
             let output = executeProcessAndReturnResult(command)
             DispatchQueue.main.async {
                 feedback += "Transferred file:\n\(fileName)\nOutput:\n\(output)\n"
-                fetchVideoFiles() // Refresh the video list
+                fetchVideoFiles()
             }
         }
     }
@@ -233,7 +257,15 @@ struct ContentView: View {
         let output = executeProcessAndReturnResult(command)
         DispatchQueue.main.async {
             feedback += "Running command: \(command)\n\(output)\n"
-            fetchVideoFiles() // Refresh the video list
+            fetchVideoFiles()
+        }
+    }
+    
+    private func connect() {
+        let command = "\(adbPath) connect \(adbAddress)"
+        let output = executeProcessAndReturnResult(command)
+        DispatchQueue.main.async {
+            feedback += "Running command: \(command)\n\(output)\n"
         }
     }
 }
