@@ -63,7 +63,7 @@ jobs:
             - name: Debug Archive
               run: ls -al "$PWD/build/"
 
-            # Step 6: Export the app
+            # Step 5: Build and Export the app
             - name: Export App
               run: |
                 xcodebuild -exportArchive \
@@ -71,9 +71,22 @@ jobs:
                   -exportPath "$PWD/build" \
                   -exportOptionsPlist "./ExportOptions.plist"
 
-            # Debug Export
-            - name: Debug Export
-              run: ls -al "$PWD/build/"
+            # Debug exported files
+            - name: Debug Exported Files
+              run: |
+                echo "Checking contents of build directory..."
+                ls -R "$PWD/build"
+
+            # Verify App Exists with dynamic path
+            - name: Verify App Exists
+              run: |
+                APP_PATH="$PWD/build/VLC AndroidTV.app"
+                if [ ! -d "$APP_PATH" ]; then
+                    echo "Error: $APP_PATH not found"
+                    exit 1
+                fi
+                echo "$APP_PATH found."
+
 
             # Step 7: Zip the app for notarization
             - name: Zip App for Notarization
