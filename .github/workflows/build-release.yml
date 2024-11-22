@@ -63,29 +63,29 @@ jobs:
             - name: Export App
               run: |
                     xcodebuild -exportArchive \
-                        -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
-                        -exportPath "$PWD/build" \
-                        -exportOptionsPlist "./ExportOptions.plist"
+                    -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+                    -exportPath "$PWD/build" \
+                    -exportOptionsPlist "./ExportOptions.plist"
 
-            # Step 7: List build directory
-            - name: List build directory
-              run: ls -l "$PWD/build"
-
-
-            # Step 8: Notarize the app
+            # Step 7: Zip the app for notarization
+            - name: Zip App for Notarization
+              run: |
+                # Zip the app file for notarization
+                zip -r "$PWD/build/VLC_AndroidTV.zip" "$PWD/build/VLC AndroidTV.app"
+            
+            # Step 8: Sign the app
             - name: Notarize App
               env:
-                    NOTARIZE_API_KEY: ${{ secrets.NOTARIZE_API_KEY }}
-                    NOTARIZE_API_KEY_ID: ${{ secrets.NOTARIZE_API_KEY_ID }}
-                    NOTARIZE_API_ISSUER_ID: ${{ secrets.NOTARIZE_API_ISSUER_ID }}
+                NOTARIZE_API_KEY: ${{ secrets.NOTARIZE_API_KEY }}
+                NOTARIZE_API_KEY_ID: ${{ secrets.NOTARIZE_API_KEY_ID }}
+                NOTARIZE_API_ISSUER_ID: ${{ secrets.NOTARIZE_API_ISSUER_ID }}
               run: |
-                    echo "$NOTARIZE_API_KEY" | base64 --decode > api_key.p8
-                    xcrun notarytool submit "$PWD/build/VLC AndroidTV.app" \
-                    --key api_key.p8 \
-                    --key-id "$NOTARIZE_API_KEY_ID" \
-                    --issuer "$NOTARIZE_API_ISSUER_ID" \
-                    --wait
-
+                echo "$NOTARIZE_API_KEY" | base64 --decode > api_key.p8
+                xcrun notarytool submit "$PWD/build/VLC_AndroidTV.zip" \
+                --key api_key.p8 \
+                --key-id "$NOTARIZE_API_KEY_ID" \
+                --issuer "$NOTARIZE_API_ISSUER_ID" \
+                --wait
 
             # Step 9: Create a .dmg file
             - name: Create DMG
