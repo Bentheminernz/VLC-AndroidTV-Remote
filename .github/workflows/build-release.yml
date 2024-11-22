@@ -7,7 +7,7 @@ on:
 jobs:
   build-and-release:
     name: Build, Notarize, and Add to Release
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       # Step 1: Check out the repository
