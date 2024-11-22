@@ -17,62 +17,73 @@ jobs:
             # Step 2: Verify environment
             - name: Verify Environment
               run: |
-                    sw_vers # Show macOS version
-                    xcodebuild -version # Show Xcode version
+                sw_vers # Show macOS version
+                xcodebuild -version # Show Xcode version
 
             # Step 3: Install Development ID Application certificate
             - name: Install Signing Certificate
               env:
-                    CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
-                    CERT_PASSWORD: ${{ secrets.KEY_PASSWORD }} # Password for the certificate
+                CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+                CERT_PASSWORD: ${{ secrets.KEY_PASSWORD }} # Password for the certificate
               run: |
-                    # Decode and save the certificate
-                    echo "$CERTIFICATE" | base64 --decode > developer_id_application.p12
+                # Decode and save the certificate
+                echo "$CERTIFICATE" | base64 --decode > developer_id_application.p12
 
-                    # Import the certificate to the macOS keychain
-                    security create-keychain -p "" build.keychain
-                    security import developer_id_application.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
-                    security list-keychains -s build.keychain
-                    security set-keychain-settings -lut 21600 build.keychain
-                    security unlock-keychain -p "" build.keychain
+                # Import the certificate to the macOS keychain
+                security create-keychain -p "" build.keychain
+                security import developer_id_application.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+                security list-keychains -s build.keychain
+                security set-keychain-settings -lut 21600 build.keychain
+                security unlock-keychain -p "" build.keychain
 
-                    # Ensure the certificate is trusted
-                    security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+                # Ensure the certificate is trusted
+                security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
 
             # Step 4: Extract version from the release tag
             - name: Get Version from Tag
               id: versioning
               run: |
-                    # Extract version from the release tag
-                    TAG_NAME="${GITHUB_REF##*/}"
-                    VERSION="${TAG_NAME#v}" # Remove leading 'v' if present
-                    echo "version=$VERSION" >> $GITHUB_OUTPUT
+                # Extract version from the release tag
+                TAG_NAME="${GITHUB_REF##*/}"
+                VERSION="${TAG_NAME#v}" # Remove leading 'v' if present
+                echo "version=$VERSION" >> $GITHUB_OUTPUT
 
             # Step 5: Build the app
             - name: Build App
               run: |
-                    xcodebuild clean archive \
-                        -project "VLC AndroidTV.xcodeproj" \
-                        -scheme "VLC AndroidTV" \
-                        -configuration Release \
-                        -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
-                        CODE_SIGN_IDENTITY="Developer ID Application" \
-                        CODE_SIGN_STYLE="Manual"
+                xcodebuild clean archive \
+                  -project "VLC AndroidTV.xcodeproj" \
+                  -scheme "VLC AndroidTV" \
+                  -configuration Release \
+                  -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+                  CODE_SIGN_IDENTITY="Developer ID Application" \
+                  CODE_SIGN_STYLE="Manual"
+
+            # Debug Archive
+            - name: Debug Archive
+              run: ls -al "$PWD/build/"
 
             # Step 6: Export the app
             - name: Export App
               run: |
-                    xcodebuild -exportArchive \
-                    -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
-                    -exportPath "$PWD/build" \
-                    -exportOptionsPlist "./ExportOptions.plist"
+                xcodebuild -exportArchive \
+                  -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+                  -exportPath "$PWD/build" \
+                  -exportOptionsPlist "./ExportOptions.plist"
+
+            # Debug Export
+            - name: Debug Export
+              run: ls -al "$PWD/build/"
 
             # Step 7: Zip the app for notarization
             - name: Zip App for Notarization
               run: |
-                # Zip the app file for notarization
+                if [ ! -d "$PWD/build/VLC AndroidTV.app" ]; then
+                    echo "Error: VLC AndroidTV.app not found in build directory"
+                    exit 1
+                fi
                 zip -r "$PWD/build/VLC_AndroidTV.zip" "$PWD/build/VLC AndroidTV.app"
-            
+
             # Step 8: Sign the app
             - name: Notarize App
               env:
@@ -82,14 +93,15 @@ jobs:
               run: |
                 echo "$NOTARIZE_API_KEY" | base64 --decode > api_key.p8
                 xcrun notarytool submit "$PWD/build/VLC_AndroidTV.zip" \
-                --key api_key.p8 \
-                --key-id "$NOTARIZE_API_KEY_ID" \
-                --issuer "$NOTARIZE_API_ISSUER_ID" \
-                --wait
+                  --key api_key.p8 \
+                  --key-id "$NOTARIZE_API_KEY_ID" \
+                  --issuer "$NOTARIZE_API_ISSUER_ID" \
+                  --wait
 
-            # Step 6: Create a .dmg file
+            # Step 9: Create a .dmg file
             - name: Verify App Exists
               run: |
+                ls -al $PWD/build/
                 if [ ! -d "$PWD/build/VLC_AndroidTV.app" ]; then
                     echo "Error: VLC_AndroidTV.app not found in build directory"
                     exit 1
@@ -103,21 +115,20 @@ jobs:
 
                 # Package the app into a DMG without setting icon positions
                 create-dmg \
-                    --volname "VLC AndroidTV Installer" \
-                    --window-size 500 300 \
-                    --icon-size 100 \
-                    --app-drop-link 250 150 \
-                    "$PWD/build/VLC_AndroidTV.dmg" \
-                    "$PWD/build/VLC_AndroidTV.app"
-
+                  --volname "VLC AndroidTV Installer" \
+                  --window-size 500 300 \
+                  --icon-size 100 \
+                  --app-drop-link 250 150 \
+                  "$PWD/build/VLC_AndroidTV.dmg" \
+                  "$PWD/build/VLC_AndroidTV.app"
 
             # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
               uses: actions/upload-release-asset@v1
               env:
-                    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                    upload_url: ${{ github.event.release.upload_url }}
-                    asset_path: "$PWD/build/VLC_AndroidTV.dmg"
-                    asset_name: "VLC_AndroidTV.dmg"
-                    asset_content_type: "application/octet-stream"
+                upload_url: ${{ github.event.release.upload_url }}
+                asset_path: "$PWD/build/VLC_AndroidTV.dmg"
+                asset_name: "VLC_AndroidTV.dmg"
+                asset_content_type: "application/octet-stream"
