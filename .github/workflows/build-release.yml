@@ -87,18 +87,29 @@ jobs:
                 --issuer "$NOTARIZE_API_ISSUER_ID" \
                 --wait
 
-            # Step 9: Create a .dmg file
+            # Step 6: Create a .dmg file
+            - name: Verify App Exists
+              run: |
+                if [ ! -d "$PWD/build/VLC_AndroidTV.app" ]; then
+                    echo "Error: VLC_AndroidTV.app not found in build directory"
+                    exit 1
+                fi
+                echo "VLC_AndroidTV.app found, proceeding to DMG creation."
+
             - name: Create DMG
               run: |
-                    brew install create-dmg || true
-                    create-dmg \
-                        --volname "VLC AndroidTV Installer" \
-                        --window-size 500 300 \
-                        --icon-size 100 \
-                        --app-drop-link 250 150 \
-                        --icon "VLC AndroidTV.app" 150 150 \
-                        "$PWD/build/VLC_AndroidTV.dmg" \
-                        "$PWD/build/VLC_AndroidTV.app"
+                # Install create-dmg if not already available
+                brew install create-dmg || true
+
+                # Package the app into a DMG without setting icon positions
+                create-dmg \
+                    --volname "VLC AndroidTV Installer" \
+                    --window-size 500 300 \
+                    --icon-size 100 \
+                    --app-drop-link 250 150 \
+                    "$PWD/build/VLC_AndroidTV.dmg" \
+                    "$PWD/build/VLC_AndroidTV.app"
+
 
             # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
