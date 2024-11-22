@@ -4,6 +4,8 @@ This is a remote app for VLC on Android TV which works via ADB<br>
 I needed this for a project so figured I'd open source it, incase anyone wants this. The code is probably a mess but enjoy!<br>
 <b>Note:</b> This is macOS only and requires macOS 14.0 Sonoma or above.
 
+<br>You can upload movie files to your Android TV or delete them, play them in VLC, toggle playback, change volume, mute and return to Android TV homescreen
+
 ## Prerequisites
 
 1. Install brew
