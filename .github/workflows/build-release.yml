@@ -115,6 +115,6 @@ jobs:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                 upload_url: ${{ github.event.release.upload_url }}
-                asset_path: "$PWD/build/"
+                asset_path: "/Users/runner/work/VLC-AndroidTV-Remote/VLC-AndroidTV-Remote/build/VLC_AndroidTV.dmg"
                 asset_name: "VLC_AndroidTV.dmg"
                 asset_content_type: "application/octet-stream"
