@@ -101,12 +101,15 @@ jobs:
 
                 # Package the app into a DMG without setting icon positions
                 create-dmg \
-                  --volname "VLC AndroidTV Installer" \
-                  --window-size 500 300 \
-                  --icon-size 100 \
-                  --app-drop-link 250 150 \
-                  "$PWD/build/VLC_AndroidTV.dmg" \
-                  "$PWD/build/VLC AndroidTV.app"
+                 --volname "VLC AndroidTV Remote" \
+                 --window-size 600 400 \
+                 --window-pos 200 200 \
+                 --text-size 14 \
+                 --icon "VLC\ AndroidTV.app" 150 150 \
+                 --app-drop-link 450 150 \
+                 "$PWD/build/VLC_AndroidTV.dmg" \
+                 "$PWD/build/VLC AndroidTV.app"
+
 
             # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
