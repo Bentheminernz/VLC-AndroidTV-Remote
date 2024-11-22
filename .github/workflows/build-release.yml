@@ -7,12 +7,17 @@ on:
 jobs:
   build-and-release:
     name: Build, Notarize, and Add to Release
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       # Step 1: Check out the repository
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify Environment
+        run: |
+         sw_vers # Show macOS version
+         xcodebuild -version # Show Xcode version
 
       # Step 2: Extract version from the release tag
       - name: Get Version from Tag
