@@ -1,11 +1,9 @@
 name: Build, Notarize, and Release
 
-# on:
-#   push:
-#     branches: [ "main" ]
-
 on:
-    workflow_dispatch:
+  push:
+    branches: [ "github-actions" ]
+
 
 jobs:
   build-and-release:
@@ -21,8 +19,9 @@ jobs:
       - name: Get App Version and Build
         id: versioning
         run: |
+          ls
           # Path to the Info.plist
-          PLIST_PATH="./VLC AndroidTV/VLC AndroidTV/Info.plist"
+          PLIST_PATH="./VLC-AndroidTV-Info.plist"
 
           # Extract version and build
           VERSION=$(defaults read "$PLIST_PATH" CFBundleShortVersionString)
