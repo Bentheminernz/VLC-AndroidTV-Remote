@@ -71,23 +71,6 @@ jobs:
                   -exportPath "$PWD/build" \
                   -exportOptionsPlist "./ExportOptions.plist"
 
-            # Debug exported files
-            - name: Debug Exported Files
-              run: |
-                echo "Checking contents of build directory..."
-                ls -R "$PWD/build"
-
-            # Verify App Exists with dynamic path
-            - name: Verify App Exists
-              run: |
-                APP_PATH="$PWD/build/VLC AndroidTV.app"
-                if [ ! -d "$APP_PATH" ]; then
-                    echo "Error: $APP_PATH not found"
-                    exit 1
-                fi
-                echo "$APP_PATH found."
-
-
             # Step 7: Zip the app for notarization
             - name: Zip App for Notarization
               run: |
@@ -110,16 +93,6 @@ jobs:
                   --key-id "$NOTARIZE_API_KEY_ID" \
                   --issuer "$NOTARIZE_API_ISSUER_ID" \
                   --wait
-
-            # Step 9: Create a .dmg file
-            - name: Verify App Exists
-              run: |
-                ls -al $PWD/build/
-                if [ ! -d "$PWD/build/VLC_AndroidTV.app" ]; then
-                    echo "Error: VLC_AndroidTV.app not found in build directory"
-                    exit 1
-                fi
-                echo "VLC_AndroidTV.app found, proceeding to DMG creation."
 
             - name: Create DMG
               run: |
