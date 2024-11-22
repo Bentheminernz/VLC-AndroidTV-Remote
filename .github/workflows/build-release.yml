@@ -1,0 +1,73 @@
+name: Build and Notarize macOS App
+
+# on:
+#   push:
+#     branches:
+#       - main
+#   pull_request:
+#     branches:
+#       - main
+
+on:
+    workflow_dispatch:
+
+jobs:
+  build-notarize-dmg:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.1'
+
+      - name: Build macOS App
+        run: |
+          xcodebuild clean archive \
+            -project "VLC AndroidTV.xcodeproj" \
+            -scheme "VLC AndroidTV" \
+            -archivePath "./build/VLC AndroidTV.xcarchive" \
+            -configuration Release \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="4TD3JXVDW7"
+
+          xcodebuild -exportArchive \
+            -archivePath "./build/VLC AndroidTV.xcarchive" \
+            -exportPath "./build" \
+            -exportOptionsPlist "ExportOptions.plist"
+
+      - name: Notarize the App
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          xcrun notarytool submit "./build/VLC AndroidTV.app" \
+            --apple-id "$APPLE_ID" \
+            --team-id "4TD3JXVDW7" \
+            --password "$APPLE_PASSWORD" \
+            --wait
+
+      - name: Staple the App
+        run: |
+          xcrun stapler staple "./build/VLC AndroidTV.app"
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg
+          create-dmg \
+            --volname "VLC AndroidTV" \
+            --window-size 500 300 \
+            --icon-size 128 \
+            --icon "VLC AndroidTV.app" 150 150 \
+            --hide-extension "VLC AndroidTV.app" \
+            --app-drop-link 350 150 \
+            "./VLC AndroidTV.dmg" "./build/VLC AndroidTV.app"
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v3
+        with:
+          name: "VLC AndroidTV.dmg"
+          path: "./VLC AndroidTV.dmg"
