@@ -67,7 +67,12 @@ jobs:
                         -exportPath "$PWD/build" \
                         -exportOptionsPlist "./ExportOptions.plist"
 
-            # Step 7: Notarize the app
+            # Step 7: List build directory
+            - name: List build directory
+              run: ls -l "$PWD/build"
+
+
+            # Step 8: Notarize the app
             - name: Notarize App
               env:
                     NOTARIZE_API_KEY: ${{ secrets.NOTARIZE_API_KEY }}
@@ -81,7 +86,7 @@ jobs:
                         --issuer "$NOTARIZE_API_ISSUER_ID" \
                         --wait
 
-            # Step 8: Create a .dmg file
+            # Step 9: Create a .dmg file
             - name: Create DMG
               run: |
                     brew install create-dmg || true
@@ -94,7 +99,7 @@ jobs:
                         "$PWD/build/VLC_AndroidTV.dmg" \
                         "$PWD/build/VLC_AndroidTV.app"
 
-            # Step 9: Upload the DMG to the release
+            # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
               uses: actions/upload-release-asset@v1
               env:
