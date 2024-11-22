@@ -80,11 +80,12 @@ jobs:
                     NOTARIZE_API_ISSUER_ID: ${{ secrets.NOTARIZE_API_ISSUER_ID }}
               run: |
                     echo "$NOTARIZE_API_KEY" | base64 --decode > api_key.p8
-                    xcrun notarytool submit "$PWD/build/VLC_AndroidTV.app" \
-                        --key api_key.p8 \
-                        --key-id "$NOTARIZE_API_KEY_ID" \
-                        --issuer "$NOTARIZE_API_ISSUER_ID" \
-                        --wait
+                    xcrun notarytool submit "$PWD/build/VLC AndroidTV.app" \
+                    --key api_key.p8 \
+                    --key-id "$NOTARIZE_API_KEY_ID" \
+                    --issuer "$NOTARIZE_API_ISSUER_ID" \
+                    --wait
+
 
             # Step 9: Create a .dmg file
             - name: Create DMG
