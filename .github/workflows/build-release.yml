@@ -110,11 +110,9 @@ jobs:
 
             # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
-              uses: actions/upload-artifact@v4
+              uses: softprops/action-gh-release@v2
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
-                upload_url: ${{ github.event.release.upload_url }}
-                asset_path: "/Users/runner/work/VLC-AndroidTV-Remote/VLC-AndroidTV-Remote/build/VLC_AndroidTV.dmg"
-                asset_name: "VLC_AndroidTV.dmg"
-                asset_content_type: "application/octet-stream"
+                files: "/Users/runner/work/VLC-AndroidTV-Remote/VLC-AndroidTV-Remote/build/VLC_AndroidTV.dmg"
+
