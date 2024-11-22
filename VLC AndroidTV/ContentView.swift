@@ -5,6 +5,7 @@ struct ContentView: View {
     @State private var feedback: String = ""
     @State private var videoFiles: [String] = []
     @AppStorage("ipAddress") var adbAddress: String = ""
+    @State private var isConnected = false
     private let adbPath = "/opt/homebrew/bin/adb"
 
     var body: some View {
@@ -14,18 +15,18 @@ struct ContentView: View {
                 .padding(.bottom, 5)
 
             HStack {
-                Button(action: fetchVideoFiles) {
-                    Text("Fetch Video Files")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
-                }
-                
-                Button(action: selectAndTransferVideo) {
-                    Text("Select and Transfer Video")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
+                if isConnected {
+                    Button(action: fetchVideoFiles) {
+                        Text("Fetch Video Files")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: selectAndTransferVideo) {
+                        Text("Select and Transfer Video")
+                            .padding()
+                            .cornerRadius(8)
+                    }
                 }
                 
                 Spacer()
@@ -33,51 +34,55 @@ struct ContentView: View {
                 TextField("ADB IP Address", text: $adbAddress)
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 200)
-
-                Button(action: {
-                    connect()
-                }) {
-                    Text("Reconnect/Connect")
+                
+                if !adbAddress.isEmpty {
+                    Button(action: {
+                        connect()
+                    }) {
+                        Text("Connect")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                }
+                
+                Button(action: disconnect) {
+                    Text("Disconnect")
                         .padding()
-                        .foregroundStyle(.white)
                         .cornerRadius(8)
                 }
             }
             
-            HStack {
-                Button(action: togglePlayPause) {
-                    Text("Toggle Play/Pause")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
-                }
-
-                Button(action: volumeUp) {
-                    Text("Volume Up")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
-                }
-
-                Button(action: volumeDown) {
-                    Text("Volume Down")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
-                }
-                
-                Button(action: muteVolume) {
-                    Text("Toggle Mute")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
-                }
-                
-                Button(action: home) {
-                    Text("Home")
-                        .padding()
-                        .foregroundStyle(.white)
-                        .cornerRadius(8)
+            if isConnected {
+                HStack {
+                    Button(action: togglePlayPause) {
+                        Text("Toggle Play/Pause")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: volumeUp) {
+                        Text("Volume Up")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: volumeDown) {
+                        Text("Volume Down")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: muteVolume) {
+                        Text("Toggle Mute")
+                            .padding()
+                            .cornerRadius(8)
+                    }
+                    
+                    Button(action: home) {
+                        Text("Home")
+                            .padding()
+                            .cornerRadius(8)
+                    }
                 }
             }
 
@@ -132,6 +137,11 @@ struct ContentView: View {
             .frame(minHeight: 200)
         }
         .padding()
+        .onAppear {
+            if !adbAddress.isEmpty {
+                connect()
+            }
+        }
     }
 
     private func executeProcessAndReturnResult(_ command: String) -> String {
@@ -262,9 +272,37 @@ struct ContentView: View {
     }
     
     private func connect() {
+        guard !adbAddress.isEmpty else {
+            feedback += "ADB IP Address is empty.\n"
+            return
+        }
+
         let command = "\(adbPath) connect \(adbAddress)"
         let output = executeProcessAndReturnResult(command)
         DispatchQueue.main.async {
+            if output.contains("connected") {
+                isConnected = true
+                feedback += "Connected to \(adbAddress).\n"
+            } else {
+                isConnected = false
+                feedback += "Failed to connect to \(adbAddress).\n"
+            }
+            
+            feedback += "Running command: \(command)\n\(output)\n"
+        }
+    }
+    
+    private func disconnect() {
+        let command = "\(adbPath) disconnect \(adbAddress)"
+        let output = executeProcessAndReturnResult(command)
+        DispatchQueue.main.async {
+            if output.contains("disconnected") {
+                isConnected = false
+                feedback += "Disconnected from \(adbAddress).\n"
+            } else {
+                feedback += "Failed to disconnect from \(adbAddress).\n"
+            }
+                
             feedback += "Running command: \(command)\n\(output)\n"
         }
     }
