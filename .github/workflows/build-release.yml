@@ -1,0 +1,101 @@
+name: Build, Notarize, and Release
+
+# on:
+#   push:
+#     branches: [ "main" ]
+
+on:
+    workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build, Notarize, and Release
+    runs-on: macos-latest
+
+    steps:
+      # Step 1: Check out the repository
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Step 2: Extract version and build number from Info.plist
+      - name: Get App Version and Build
+        id: versioning
+        run: |
+          # Path to the Info.plist
+          PLIST_PATH="./VLC AndroidTV/VLC AndroidTV/Info.plist"
+
+          # Extract version and build
+          VERSION=$(defaults read "$PLIST_PATH" CFBundleShortVersionString)
+          BUILD=$(defaults read "$PLIST_PATH" CFBundleVersion)
+
+          # Set outputs for later use
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "build=$BUILD" >> $GITHUB_OUTPUT
+
+      # Step 3: Build the app
+      - name: Build App
+        run: |
+          xcodebuild clean build \
+            -project "VLC AndroidTV.xcodeproj" \
+            -scheme "VLC AndroidTV" \
+            -configuration Release \
+            -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+            archive
+
+      # Step 4: Export the app
+      - name: Export App
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+            -exportPath "$PWD/build" \
+            -exportOptionsPlist "./ExportOptions.plist"
+
+      # Step 5: Notarize the app
+      - name: Notarize App
+        env:
+          AC_USERNAME: ${{ secrets.APPLE_ID }}
+          AC_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+        run: |
+          xcrun altool --notarize-app \
+            --primary-bundle-id "com.benlawrence.VLC-AndroidTV" \
+            --username "$AC_USERNAME" \
+            --password "$AC_PASSWORD" \
+            --file "$PWD/build/VLC_AndroidTV.app"
+
+      # Step 6: Create a .dmg file
+      - name: Create DMG
+        run: |
+          # Install create-dmg if not already available
+          brew install create-dmg || true
+
+          # Package the app into a DMG
+          create-dmg \
+            --volname "VLC AndroidTV Installer" \
+            --window-size 500 300 \
+            --icon-size 100 \
+            --app-drop-link 250 150 \
+            --icon "VLC AndroidTV.app" 150 150 \
+            "$PWD/build/VLC_AndroidTV.dmg" \
+            "$PWD/build/VLC_AndroidTV.app"
+
+      # Step 7: Create a release on GitHub
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ steps.versioning.outputs.version }}-build${{ steps.versioning.outputs.build }}"
+          release_name: "VLC AndroidTV v${{ steps.versioning.outputs.version }} (Build ${{ steps.versioning.outputs.build }})"
+          draft: false
+          prerelease: false
+
+      # Step 8: Upload the DMG to the release
+      - name: Upload DMG to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create-release.outputs.upload_url }}
+          asset_path: "$PWD/build/VLC_AndroidTV.dmg"
+          asset_name: "VLC_AndroidTV.dmg"
+          asset_content_type: "application/octet-stream"
