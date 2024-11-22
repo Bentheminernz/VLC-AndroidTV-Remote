@@ -133,7 +133,7 @@ jobs:
                   --icon-size 100 \
                   --app-drop-link 250 150 \
                   "$PWD/build/VLC_AndroidTV.dmg" \
-                  "$PWD/build/VLC_AndroidTV.app"
+                  "$PWD/build/VLC AndroidTV.app"
 
             # Step 10: Upload the DMG to the release
             - name: Upload DMG to Release
