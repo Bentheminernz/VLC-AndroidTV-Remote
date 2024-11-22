@@ -7,19 +7,39 @@ on:
 jobs:
   build-and-release:
     name: Build, Notarize, and Add to Release
-    runs-on: macos-15
+    runs-on: macos-latest
 
     steps:
       # Step 1: Check out the repository
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Step 2: Verify environment
       - name: Verify Environment
         run: |
-         sw_vers # Show macOS version
-         xcodebuild -version # Show Xcode version
+          sw_vers # Show macOS version
+          xcodebuild -version # Show Xcode version
 
-      # Step 2: Extract version from the release tag
+      # Step 3: Install Development ID Application certificate
+      - name: Install Signing Certificate
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.KEY_PASSWORD }} # Password for the certificate
+        run: |
+          # Decode and save the certificate
+          echo "$CERTIFICATE" | base64 --decode > developer_id_application.p12
+
+          # Import the certificate to the macOS keychain
+          security create-keychain -p "" build.keychain
+          security import developer_id_application.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -s build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "" build.keychain
+
+          # Ensure the certificate is trusted
+          security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+
+      # Step 4: Extract version from the release tag
       - name: Get Version from Tag
         id: versioning
         run: |
@@ -28,17 +48,18 @@ jobs:
           VERSION="${TAG_NAME#v}" # Remove leading 'v' if present
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
-      # Step 3: Build the app
+      # Step 5: Build the app
       - name: Build App
         run: |
-          xcodebuild clean build \
+          xcodebuild clean archive \
             -project "VLC AndroidTV.xcodeproj" \
             -scheme "VLC AndroidTV" \
             -configuration Release \
             -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
-            archive
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            CODE_SIGN_STYLE="Manual"
 
-      # Step 4: Export the app
+      # Step 6: Export the app
       - name: Export App
         run: |
           xcodebuild -exportArchive \
@@ -46,7 +67,7 @@ jobs:
             -exportPath "$PWD/build" \
             -exportOptionsPlist "./ExportOptions.plist"
 
-      # Step 5: Notarize the app
+      # Step 7: Notarize the app
       - name: Notarize App
         env:
           AC_USERNAME: ${{ secrets.APPLE_ID }}
@@ -58,7 +79,7 @@ jobs:
             --password "$AC_PASSWORD" \
             --file "$PWD/build/VLC_AndroidTV.app"
 
-      # Step 6: Create a .dmg file
+      # Step 8: Create a .dmg file
       - name: Create DMG
         run: |
           # Install create-dmg if not already available
@@ -74,7 +95,7 @@ jobs:
             "$PWD/build/VLC_AndroidTV.dmg" \
             "$PWD/build/VLC_AndroidTV.app"
 
-      # Step 7: Upload the DMG to the release
+      # Step 9: Upload the DMG to the release
       - name: Upload DMG to Release
         uses: actions/upload-release-asset@v1
         env:
