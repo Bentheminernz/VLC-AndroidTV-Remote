@@ -1,0 +1,121 @@
+name: Build, Notarize, and Add to Release
+
+on:
+    release:
+        types: [published]
+
+jobs:
+    build-and-release:
+        name: Build, Notarize, and Add to Release
+        runs-on: macos-15
+
+        steps:
+            # Step 1: Check out the repository
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            # Step 2: Verify environment
+            - name: Verify Environment
+              run: |
+                sw_vers # Show macOS version
+                xcodebuild -version # Show Xcode version
+
+            # Step 3: Install Development ID Application certificate
+            - name: Install Signing Certificate
+              env:
+                CERTIFICATE: ${{ secrets.DEVELOPER_ID_CERTIFICATE }}
+                CERT_PASSWORD: ${{ secrets.KEY_PASSWORD }} # Password for the certificate
+              run: |
+                # Decode and save the certificate
+                echo "$CERTIFICATE" | base64 --decode > developer_id_application.p12
+
+                # Import the certificate to the macOS keychain
+                security create-keychain -p "" build.keychain
+                security import developer_id_application.p12 -k build.keychain -P "$CERT_PASSWORD" -T /usr/bin/codesign
+                security list-keychains -s build.keychain
+                security set-keychain-settings -lut 21600 build.keychain
+                security unlock-keychain -p "" build.keychain
+
+                # Ensure the certificate is trusted
+                security set-key-partition-list -S apple-tool:,apple: -s -k "" build.keychain
+
+            # Step 4: Extract version from the release tag
+            - name: Get Version from Tag
+              id: versioning
+              run: |
+                # Extract version from the release tag
+                TAG_NAME="${GITHUB_REF##*/}"
+                VERSION="${TAG_NAME#v}" # Remove leading 'v' if present
+                echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+            # Step 5: Build the app
+            - name: Build App
+              run: |
+                xcodebuild clean archive \
+                  -project "VLC AndroidTV.xcodeproj" \
+                  -scheme "VLC AndroidTV" \
+                  -configuration Release \
+                  -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+                  CODE_SIGN_IDENTITY="Developer ID Application" \
+                  CODE_SIGN_STYLE="Manual"
+
+            # Debug Archive
+            - name: Debug Archive
+              run: ls -al "$PWD/build/"
+
+            # Step 5: Build and Export the app
+            - name: Export App
+              run: |
+                xcodebuild -exportArchive \
+                  -archivePath "$PWD/build/VLC_AndroidTV.xcarchive" \
+                  -exportPath "$PWD/build" \
+                  -exportOptionsPlist "./ExportOptions.plist"
+
+            # Step 7: Zip the app for notarization
+            - name: Zip App for Notarization
+              run: |
+                if [ ! -d "$PWD/build/VLC AndroidTV.app" ]; then
+                    echo "Error: VLC AndroidTV.app not found in build directory"
+                    exit 1
+                fi
+                zip -r "$PWD/build/VLC_AndroidTV.zip" "$PWD/build/VLC AndroidTV.app"
+
+            # Step 8: Sign the app
+            - name: Notarize App
+              env:
+                NOTARIZE_API_KEY: ${{ secrets.NOTARIZE_API_KEY }}
+                NOTARIZE_API_KEY_ID: ${{ secrets.NOTARIZE_API_KEY_ID }}
+                NOTARIZE_API_ISSUER_ID: ${{ secrets.NOTARIZE_API_ISSUER_ID }}
+              run: |
+                echo "$NOTARIZE_API_KEY" | base64 --decode > api_key.p8
+                xcrun notarytool submit "$PWD/build/VLC_AndroidTV.zip" \
+                  --key api_key.p8 \
+                  --key-id "$NOTARIZE_API_KEY_ID" \
+                  --issuer "$NOTARIZE_API_ISSUER_ID" \
+                  --wait
+
+            - name: Create DMG
+              run: |
+                # Install create-dmg if not already available
+                brew install create-dmg || true
+
+                # Package the app into a DMG without setting icon positions
+                create-dmg \
+                 --volname "VLC AndroidTV Remote" \
+                 --window-size 600 400 \
+                 --window-pos 200 200 \
+                 --text-size 14 \
+                 --icon "VLC\ AndroidTV.app" 150 150 \
+                 --app-drop-link 450 150 \
+                 "$PWD/build/VLC_AndroidTV.dmg" \
+                 "$PWD/build/VLC AndroidTV.app"
+
+
+            # Step 10: Upload the DMG to the release
+            - name: Upload DMG to Release
+              uses: softprops/action-gh-release@v2
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                files: "/Users/runner/work/VLC-AndroidTV-Remote/VLC-AndroidTV-Remote/build/VLC_AndroidTV.dmg"
+
