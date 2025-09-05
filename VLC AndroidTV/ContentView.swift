@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-  @State private var adbManager: ADBManager = ADBManager()
+  @State private var adbManager = ADBManager.shared
   @AppStorage("ipAddress") var storedIPAddress: String = ""
   
   var body: some View {
