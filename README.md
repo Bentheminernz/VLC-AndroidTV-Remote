@@ -1,4 +1,9 @@
-# Android TV VLC ADB Remote
+<h1 align="center">
+<img src="Resources/READMEIcon.png" width="192" />
+
+Android TV VLC ADB Remote
+</h1>
+(catch name i know)
 
 This is a remote app for VLC on Android TV which works via ADB<br>
 I needed this for a project so figured I'd open source it, incase anyone wants this. The code is probably a mess but enjoy!<br>
