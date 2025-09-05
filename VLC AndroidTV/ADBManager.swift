@@ -13,14 +13,21 @@ import AppKit
 @MainActor
 final class ADBManager {
   private let adbPath = "/opt/homebrew/bin/adb"
+  private var cachedVideos: Set<String> = []
   
   var videoFiles: [String] = []
   var feedback: String = ""
   var isConnected: Bool = false
   var adbAddress: String = ""
+  var localVLCPassword: String = ""
+  
+  let appFolder: URL?
+  
+  init() {
+    self.appFolder = ADBManager.getAppSupportFolder(appFolderName: "VLCADBAndroidTV")
+  }
   
   // MARK: - Core ADB Operations
-  
   func connect() async {
     guard !adbAddress.isEmpty else {
       appendFeedback("ADB IP Address is empty.")
@@ -56,7 +63,6 @@ final class ADBManager {
   }
   
   // MARK: - Video File Management
-  
   func fetchVideoFiles() async {
     let createDirCommand = """
         \(adbPath) shell mkdir -p /sdcard/Download/Videos
@@ -71,6 +77,12 @@ final class ADBManager {
     let files = output.split(separator: "\n").map { String($0) }.filter { !$0.isEmpty }
     videoFiles = files
     appendFeedback("Fetched files:\n\(files.joined(separator: "\n"))")
+    
+    Task {
+      for video in videoFiles {
+        await precacheVideo(filePath: video)
+      }
+    }
   }
   
   func selectAndTransferVideo() async {
@@ -96,7 +108,30 @@ final class ADBManager {
     }
   }
   
-  func transferVideoToMac(filePath: String) async {
+  func transferVideoToMac(filePath: String, localDirectory: String? = nil) async -> URL {
+    let fileName = (filePath as NSString).lastPathComponent
+    
+    if let providedDir = localDirectory, !providedDir.isEmpty {
+      var isDir: ObjCBool = false
+      let exists = FileManager.default.fileExists(atPath: providedDir, isDirectory: &isDir)
+      if exists && isDir.boolValue {
+        let localFilePath = "\(providedDir)/\(fileName)"
+        let localFileURL = URL(fileURLWithPath: localFilePath)
+        
+        if FileManager.default.fileExists(atPath: localFilePath) {
+          appendFeedback("File already exists in cache: \(fileName)")
+          return localFileURL
+        }
+        
+        let command = "\(adbPath) pull \"/sdcard/Download/Videos/\(filePath)\" \"\(localFilePath)\""
+        let output = await executeProcessAndReturnResult(command)
+        appendFeedback("Transferred file to Mac:\n\(fileName)\nOutput:\n\(output)")
+        return localFileURL
+      } else {
+        appendFeedback("Provided local directory is invalid: \(providedDir). Falling back to folder selection.")
+      }
+    }
+    
     let panel = NSOpenPanel()
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
@@ -105,12 +140,28 @@ final class ADBManager {
     
     if panel.runModal() == .OK, let selectedURL = panel.url {
       let localDir = selectedURL.path
-      let fileName = (filePath as NSString).lastPathComponent
-      let command = "\(adbPath) pull \"/sdcard/Download/Videos/\(filePath)\" \"\(localDir)/\(fileName)\""
+      let localFilePath = "\(localDir)/\(fileName)"
+      
+      if FileManager.default.fileExists(atPath: localFilePath) {
+        appendFeedback("File already exists: \(fileName)")
+        return URL(fileURLWithPath: localFilePath)
+      }
+      
+      let command = "\(adbPath) pull \"/sdcard/Download/Videos/\(filePath)\" \"\(localFilePath)\""
       let output = await executeProcessAndReturnResult(command)
       
       appendFeedback("Transferred file to Mac:\n\(fileName)\nOutput:\n\(output)")
+      return URL(fileURLWithPath: localFilePath)
     }
+    return URL(fileURLWithPath: "")
+  }
+  
+  func precacheVideo(filePath: String) async {
+      guard !cachedVideos.contains(filePath) else { return }
+      
+      let cacheDir = appFolder?.appendingPathComponent("Cache").path ?? ""
+      _ = await transferVideoToMac(filePath: filePath, localDirectory: cacheDir)
+      cachedVideos.insert(filePath)
   }
   
   func deleteVideo(filePath: String) async {
@@ -205,5 +256,76 @@ final class ADBManager {
     let command = "which \(adbPath) && ls -la \(adbPath)"
     let output = await executeProcessAndReturnResult(command)
     return !output.contains("No such file") && !output.contains("operation not permitted")
+  }
+  
+  static func getAppSupportFolder(appFolderName: String) -> URL? {
+    let fileManager = FileManager.default
+    guard let appSupportURL = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+      print("could not find Application Support directory")
+      return nil
+    }
+    let folderURL = appSupportURL.appendingPathComponent(appFolderName)
+    if !fileManager.fileExists(atPath: folderURL.path) {
+      do {
+        try fileManager.createDirectory(at: folderURL, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: folderURL.appendingPathComponent("Cache"), withIntermediateDirectories: true)
+        print("created folder at \(folderURL.path)")
+      } catch {
+        print("failed to create folder: \(error)")
+        return nil
+      }
+    }
+    return folderURL
+  }
+  
+  func clearCacheFolderInAppSupport() {
+    guard let appFolder = appFolder else { return }
+    let fileManager = FileManager.default
+    let cacheFolder = appFolder.appendingPathComponent("Cache")
+    if fileManager.fileExists(atPath: cacheFolder.path) {
+      do {
+        let contents = try fileManager.contentsOfDirectory(atPath: cacheFolder.path)
+        for file in contents {
+          let filePath = cacheFolder.appendingPathComponent(file).path
+          try fileManager.removeItem(atPath: filePath)
+        }
+        print("Cleared cache folder at \(cacheFolder.path)")
+      } catch {
+        print("Failed to clear cache folder: \(error)")
+      }
+    }
+  }
+  
+  private func playVideoOnMac(filePath: URL) async {
+    let vlcURL = URL(fileURLWithPath: "/Applications/VLC.app")
+    if FileManager.default.fileExists(atPath: vlcURL.path) {
+      let config = NSWorkspace.OpenConfiguration()
+      NSWorkspace.shared.open([filePath], withApplicationAt: vlcURL, configuration: config, completionHandler: nil)
+    } else {
+      appendFeedback("VLC is not installed in /Applications.")
+    }
+  }
+  
+  func playVideoSimultaneously(filePath: String) async {
+      let cacheDir = appFolder?.appendingPathComponent("Cache").path ?? ""
+      let fileName = (filePath as NSString).lastPathComponent
+      let localPath = "\(cacheDir)/\(fileName)"
+      
+      if !FileManager.default.fileExists(atPath: localPath) {
+          appendFeedback("Video not cached. Pre-caching now...")
+          await precacheVideo(filePath: filePath)
+      }
+      
+      let localURL = URL(fileURLWithPath: localPath)
+      
+      await withTaskGroup(of: Void.self) { group in
+          group.addTask {
+              await self.playVideo(filePath: filePath)
+          }
+          
+          group.addTask {
+              await self.playVideoOnMac(filePath: localURL)
+          }
+      }
   }
 }
