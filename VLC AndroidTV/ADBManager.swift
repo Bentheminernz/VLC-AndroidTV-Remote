@@ -9,9 +9,11 @@ import Foundation
 import Observation
 import AppKit
 
-@Observable
 @MainActor
+@Observable
 final class ADBManager {
+  static let shared = ADBManager()
+  
   private let adbPath = "/opt/homebrew/bin/adb"
   private var cachedVideos: Set<String> = []
   

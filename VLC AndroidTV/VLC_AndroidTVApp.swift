@@ -9,7 +9,7 @@ import SwiftUI
 
 @main
 struct VLC_AndroidTVApp: App {
-  @State private var adbManager = ADBManager()
+  @State private var adbManager = ADBManager.shared
   
   var body: some Scene {
     WindowGroup {
@@ -22,25 +22,26 @@ struct VLC_AndroidTVApp: App {
           Task { await adbManager.fetchVideoFiles() }
         }
         .keyboardShortcut("r", modifiers: [.command])
-        .disabled(!adbManager.isConnected)
+        // TODO: - Disabled isnt working for some reason
+//        .disabled(!adbManager.isConnected)
         
         Button("Select and Transfer Video") {
           Task { await adbManager.selectAndTransferVideo() }
         }
         .keyboardShortcut("t", modifiers: [.command])
-        .disabled(!adbManager.isConnected)
+//        .disabled(!adbManager.isConnected)
         
         Divider()
         
         Button("Connect to ADB") {
           Task { await adbManager.connect() }
         }
-        .disabled(adbManager.adbAddress.isEmpty || adbManager.isConnected)
+//        .disabled(adbManager.adbAddress.isEmpty || adbManager.isConnected)
         
         Button("Disconnect from ADB") {
           Task { await adbManager.disconnect() }
         }
-        .disabled(!adbManager.isConnected)
+//        .disabled(!adbManager.isConnected)
       }
     }
   }
