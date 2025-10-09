@@ -2,7 +2,9 @@ import SwiftUI
 
 struct ContentView: View {
   @State private var adbManager = ADBManager.shared
+  @State private var lumaManager = LumaManager.shared
   @AppStorage("ipAddress") var storedIPAddress: String = ""
+//  @AppStorage("enableLumaCommands") var enableLumaCommands: Bool = false
   
   var body: some View {
     VStack(alignment: .leading, spacing: 20) {
@@ -164,6 +166,34 @@ struct ContentView: View {
             
         }
         
+        Button(action: {
+          Task {
+            await lumaManager.checkForFFmpegCommands()
+          }
+        }) {
+          Text("Fetch LumaMap FFmpeg Commands")
+            .padding()
+            .cornerRadius(8)
+        }
+        
+        Button(action: {
+          Task {
+            let response = await lumaManager.convertLatestFFMpegToArm()
+            if response != nil {
+              adbManager.feedback += "\nConverted FFmpeg Command:\n\(response!)\n"
+              let pb = NSPasteboard.general
+              pb.clearContents()
+              pb.setString(response!, forType: .string)
+            } else {
+              adbManager.feedback += "\nNo FFmpeg command available to convert.\n"
+            }
+          }
+        }) {
+          Text("Convert Latest Command")
+            .padding()
+            .cornerRadius(8)
+        }
+        
         Text("Output:")
           .font(.headline)
       }
@@ -200,6 +230,15 @@ struct ContentView: View {
             adbManager.feedback += "ADB access denied. Check app permissions and sandbox settings.\n"
           }
         }
+      }
+    }
+    .onChange(of: lumaManager.ffmpegCommands) { oldCommands, newCommands in
+      guard oldCommands != newCommands else { return }
+      if !newCommands.isEmpty {
+        let commandsText = newCommands.joined(separator: "\n\n")
+        adbManager.feedback += "\nLumaMap FFmpeg Commands (\(newCommands.count)):\n\(commandsText)\n"
+      } else {
+        adbManager.feedback += "\nNo LumaMap FFmpeg commands found in the log.\n"
       }
     }
   }
