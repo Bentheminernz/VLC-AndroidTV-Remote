@@ -18,7 +18,7 @@ final class LumaManager {
   
   let ffmpeg = "/opt/homebrew/bin/ffmpeg"
   
-  func convertLatestFFMpegToArm(bitrate: String = "8000k") async -> String? {
+  func convertLatestFFMpegToArm(bitrate: String = "10000k") async -> String? {
     guard var command = ffmpegCommands.last?.trimmingCharacters(in: .whitespacesAndNewlines), !command.isEmpty else {
       print("No FFmpeg command available to convert.")
       return nil
@@ -35,15 +35,40 @@ final class LumaManager {
       return command
     }
     
-    let bitrateFlag = " -b:v \(bitrate)"
+    // Find the output file (last argument that looks like a path)
+    let components = command.split(separator: " ", omittingEmptySubsequences: true)
+    var outputFileIndex: Int?
     
-    // Preferred insertion point: before -progress (global option usually at end)
-    if let range = command.range(of: " -progress ") {
-      command.insert(contentsOf: bitrateFlag, at: range.lowerBound)
-    } else if let rangeY = command.range(of: " -y") { // fallback: before -y
-      command.insert(contentsOf: bitrateFlag, at: rangeY.lowerBound)
-    } else { // last fallback: append
-      command.append(bitrateFlag)
+    for (index, component) in components.enumerated().reversed() {
+      let str = String(component)
+      if str.hasPrefix("/") || str.hasSuffix(".mp4") || str.hasSuffix(".mov") {
+        // Make sure it's not an input file (comes after -i)
+        if index > 0 && components[index - 1] != "-i" {
+          outputFileIndex = index
+          break
+        }
+      }
+    }
+    
+    // Insert bitrate BEFORE output file
+    if let outputIndex = outputFileIndex {
+      let beforeOutput = components[..<outputIndex].joined(separator: " ")
+      let afterOutput = components[outputIndex...].joined(separator: " ")
+      command = "\(beforeOutput) -b:v \(bitrate) \(afterOutput)"
+    } else {
+      // Fallback: try to insert before -progress or -y
+      if let range = command.range(of: " -progress ") {
+        command.insert(contentsOf: " -b:v \(bitrate)", at: range.lowerBound)
+      } else if let rangeY = command.range(of: " -y") {
+        command.insert(contentsOf: " -b:v \(bitrate)", at: rangeY.lowerBound)
+      } else {
+        // Last resort: append before the last word (likely the output file)
+        if let lastSpace = command.lastIndex(of: " ") {
+          command.insert(contentsOf: " -b:v \(bitrate)", at: lastSpace)
+        } else {
+          command.append(" -b:v \(bitrate)")
+        }
+      }
     }
     
     print("Converted FFmpeg command with bitrate: \n\(command)")
@@ -65,75 +90,44 @@ final class LumaManager {
     do {
       let logContent = try String(contentsOfFile: logPath, encoding: .utf8)
       print("LumaMap log content read successfully (\(logContent.count) chars)")
-      let lines = logContent.components(separatedBy: .newlines)
       
-      var collected: [String] = []
-      collected.reserveCapacity(4)
+      // Pre-compile regex once for better performance
+      let pattern = "\"[^\"\n]*-i [^\"\n]*-filter_complex[^\"\n]*\"|(?:^|\\s)(?:ffmpeg|-i ).*?-filter_complex.*?(?=\\n|$)"
+      guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]) else {
+        return []
+      }
       
-      for rawLine in lines {
-        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !line.isEmpty else { continue }
-        guard line.contains("-i ") else { continue }
-        guard line.contains("-filter_complex") || line.contains("drawbox") || line.contains("perspective=") else { continue }
+      var collected = Set<String>() // Use Set for O(1) duplicate checking
+      let fullRange = NSRange(location: 0, length: (logContent as NSString).length)
+      let matches = regex.matches(in: logContent, options: [], range: fullRange)
+      
+      for match in matches {
+        var candidate = (logContent as NSString).substring(with: match.range)
+          .trimmingCharacters(in: .whitespacesAndNewlines)
         
-        var candidate = line
+        // Remove quotes if present
         if candidate.hasPrefix("\"") && candidate.hasSuffix("\"") {
-          candidate.removeFirst()
-          candidate.removeLast()
+          candidate = String(candidate.dropFirst().dropLast())
         }
         
-        if !(candidate.hasPrefix("-i ") || candidate.hasPrefix("ffmpeg ") || candidate.hasPrefix("/Applications/LumaMap.app/Contents/MacOS/ffmpeg")) {
+        // Validate it looks like an FFmpeg command
+        guard candidate.contains("-i ") &&
+              (candidate.contains("-filter_complex") || candidate.contains("drawbox") || candidate.contains("perspective=")) else {
           continue
         }
         
-        if !collected.contains(candidate) {
-          print("[LumaManager] Detected FFmpeg command (line heuristic): \n\(candidate)")
-          collected.append(candidate)
-        }
-      }
-      
-      if let regex = try? NSRegularExpression(pattern: "\"[^\"\n]*-i [^\"\n]*-filter_complex[^\"\n]*\"", options: []) {
-        let fullRange = NSRange(location: 0, length: (logContent as NSString).length)
-        let matches = regex.matches(in: logContent, options: [], range: fullRange)
-        for match in matches {
-          let quoted = (logContent as NSString).substring(with: match.range)
-          var inner = quoted
-          if inner.hasPrefix("\"") { inner.removeFirst() }
-          if inner.hasSuffix("\"") { inner.removeLast() }
-          if !collected.contains(inner) {
-            print("[LumaManager] Detected FFmpeg command (regex): \n\(inner)")
-            collected.append(inner)
-          }
-        }
+        collected.insert(candidate)
+        print("[LumaManager] Detected FFmpeg command: \n\(candidate)")
       }
       
       if collected.isEmpty {
-        print("[LumaManager] No FFmpeg commands detected. Diagnostics:")
-
-        let diagnostic = lines
-          .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-          .filter { $0.contains("-i ") }
-          .prefix(10)
-        for (idx, l) in diagnostic.enumerated() {
-          print("  Candidate #\(idx): \(l)")
-        }
+        print("[LumaManager] No FFmpeg commands detected.")
       }
       
-      return collected
+      return Array(collected)
     } catch {
       print("Error reading LumaMap log file: \(error)")
       return []
     }
-  }
-  
-  private func extractFFmpegCommand(from line: String) -> String {
-    // Legacy extractor kept for compatibility (now unused by main logic)
-    let trimmed = line.trimmingCharacters(in: .whitespaces)
-    if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") {
-      let startIndex = trimmed.index(trimmed.startIndex, offsetBy: 1)
-      let endIndex = trimmed.index(trimmed.endIndex, offsetBy: -1)
-      return String(trimmed[startIndex..<endIndex])
-    }
-    return trimmed
   }
 }
